@@ -4,6 +4,11 @@ Copies line.txt (the entry, one line, 1-200 characters) to
 /output/entry.txt byte for byte. MAKEFUN_OUTPUT_DIR, when set, stands
 in for /output so the entry can be tested locally.
 
+Pipeline, each step in its own function so a failure names its stage:
+read_entry loads line.txt, validate_entry checks the one-line rule,
+then the copy is written and verify_copy re-reads it and compares it
+byte for byte with the source.
+
 Fails loudly if anything is off: the copy's size differs, its bytes
 differ from line.txt, the text is not 1-200 characters, it is only
 white space, or it is not a single line. A bad entry never slips
@@ -18,8 +23,11 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 LINE_FILE = HERE / "line.txt"
-OUTPUT_DIR = Path(os.environ.get("MAKEFUN_OUTPUT_DIR", "/output"))
-OUTPUT_FILE = OUTPUT_DIR / "entry.txt"
+
+
+def output_file() -> Path:
+    """Resolve where the copy goes, honouring MAKEFUN_OUTPUT_DIR."""
+    return Path(os.environ.get("MAKEFUN_OUTPUT_DIR", "/output")) / "entry.txt"
 
 
 def read_entry() -> tuple[bytes, str]:
@@ -44,9 +52,9 @@ def validate_entry(text: str) -> None:
         raise RuntimeError("entry must be a single line")
 
 
-def verify_copy(source: bytes) -> None:
+def verify_copy(target: Path, source: bytes) -> None:
     """Re-read the copy and fail loudly unless it matches line.txt."""
-    written = OUTPUT_FILE.read_bytes()
+    written = target.read_bytes()
     if len(written) != len(source):
         raise RuntimeError(
             f"copy size differs: wrote {len(written)} bytes, "
@@ -67,12 +75,13 @@ def main() -> None:
     source, text = read_entry()
     validate_entry(text)
 
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    OUTPUT_FILE.write_bytes(source)
+    target = output_file()
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(source)
 
-    verify_copy(source)
+    verify_copy(target, source)
 
-    print(f"wrote {OUTPUT_FILE} ({len(source)} bytes, {len(text)} characters)")
+    print(f"wrote {target} ({len(source)} bytes, {len(text)} characters)")
 
 
 if __name__ == "__main__":
@@ -80,4 +89,4 @@ if __name__ == "__main__":
         main()
     except RuntimeError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
-        raise
+        sys.exit(1)
