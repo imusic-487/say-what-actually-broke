@@ -22,13 +22,18 @@ OUTPUT_DIR = Path(os.environ.get("MAKEFUN_OUTPUT_DIR", "/output"))
 OUTPUT_FILE = OUTPUT_DIR / "entry.txt"
 
 
-def main() -> None:
+def read_entry() -> tuple[bytes, str]:
+    """Read line.txt and return its raw bytes and decoded text."""
     source = LINE_FILE.read_bytes()
     try:
         text = source.decode("utf-8", errors="strict")
     except UnicodeDecodeError as exc:
         raise RuntimeError(f"line.txt is not valid UTF-8: {exc}") from exc
+    return source, text
 
+
+def validate_entry(text: str) -> None:
+    """Fail loudly unless the entry is one line of 1-200 characters."""
     if not 1 <= len(text) <= 200:
         raise RuntimeError(
             f"entry is {len(text)} characters, allowed 1-200"
@@ -38,9 +43,9 @@ def main() -> None:
     if "\n" in text or "\r" in text:
         raise RuntimeError("entry must be a single line")
 
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    OUTPUT_FILE.write_bytes(source)
 
+def verify_copy(source: bytes) -> None:
+    """Re-read the copy and fail loudly unless it matches line.txt."""
     written = OUTPUT_FILE.read_bytes()
     if len(written) != len(source):
         raise RuntimeError(
@@ -56,6 +61,16 @@ def main() -> None:
             f"byte {offset} (wrote 0x{written[offset]:02x}, "
             f"source is 0x{source[offset]:02x})"
         )
+
+
+def main() -> None:
+    source, text = read_entry()
+    validate_entry(text)
+
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    OUTPUT_FILE.write_bytes(source)
+
+    verify_copy(source)
 
     print(f"wrote {OUTPUT_FILE} ({len(source)} bytes, {len(text)} characters)")
 
